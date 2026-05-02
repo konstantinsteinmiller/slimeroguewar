@@ -1,0 +1,120 @@
+{
+  "name": "slime-rogue-war",
+  "version": "1.0.7",
+  "private": true,
+  "type": "module",
+  "main": "./electron/out/main/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "run-p type-check \"build-only {@}\" --",
+    "build-only": "vite build ",
+    "build:crazy-web": "vite build --mode crazy-web --base=./ ",
+    "build:wavedash": "vite build --mode wavedash --base=./ --outDir=wavedash-dist && wavedash build push",
+    "build:itch": "vite build --mode itch --base=./ && cd dist && tar -a -cf ../slime-rogue-war-itch.zip * && cd .. && move slime-rogue-war-itch.zip dist\\",
+    "build:glitch": "vite build --mode glitch --base=./ && cd dist && tar -a -cf ../slime-rogue-war-glitch.zip * && cd .. && move slime-rogue-war-glitch.zip dist\\",
+    "build:game-distribution": "vite build --mode game-distribution --base=./ && cd dist && tar -a -cf ../slime-rogue-war-gd.zip * && cd .. && move slime-rogue-war-gd.zip dist\\",
+    "build-github-main": "VITE_APP_PVP_ENABLED=true vite build --base=/slime-rogue-war/ --outDir=dist",
+    "build-github-develop": "vite build --base=/slime-rogue-war/develop/ --outDir=dist/develop",
+    "build-github-demo": "vite build --mode demo --base=/slime-rogue-war/demo/ --outDir=dist/demo",
+    "validated-build": "vue-tsc -b && vite build",
+    "deploy": "vite build && surge dist/ --domain slime-rogue-war.surge.sh",
+    "deploy-demo": "vite build --mode demo && surge dist/ --domain slime-rogue-war-demo.surge.sh",
+    "type-check": "vue-tsc --build",
+    "format": "prettier --write --experimental-cli src",
+    "test": "vitest run",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "visualize-bundle": "npx vite-bundle-visualizer",
+    "tauri": "tauri",
+    "tauri:dev": "dotenv -e .env.tauri -- tauri dev",
+    "tauri:dev-android": "dotenv -e .env.tauri -- tauri android dev",
+    "tauri:build": "dotenv -e .env.tauri -- tauri build",
+    "tauri:build-android": "dotenv -e .env.tauri -- tauri android build",
+    "tauri:build-android-apk": "dotenv -e .env.tauri -e .env.tauri.remote -- tauri android build --apk && node scripts/bump-android-version-code.mjs",
+    "tauri:build-android-aab": "dotenv -e .env.tauri -e .env.tauri.remote -- tauri android build --aab && node scripts/bump-android-version-code.mjs",
+    "ci:android:aab": "gh workflow run android-build.yml -f format=aab -f build_type=release && echo \"Triggered AAB release build — track at: $(gh repo view --json url -q .url)/actions/workflows/android-build.yml\"",
+    "ci:android:apk": "gh workflow run android-build.yml -f format=apk -f build_type=release && echo \"Triggered APK release build — track at: $(gh repo view --json url -q .url)/actions/workflows/android-build.yml\"",
+    "ci:ios:testflight": "gh workflow run ios-build.yml -f export_method=app-store-connect -f upload_testflight=true && echo \"Triggered iOS TestFlight build — track at: $(gh repo view --json url -q .url)/actions/workflows/ios-build.yml\"",
+    "tauri:build-ios": "dotenv -e .env.tauri -- tauri ios build",
+    "tauri:dev-ios": "dotenv -e .env.tauri -- tauri ios dev",
+    "native-dev": "dotenv -e .env.native -- electron-vite dev",
+    "native-dev:demo": "dotenv -e .env.nativedemo -- electron-vite dev",
+    "native-build": "electron-vite build",
+    "native-preview": "electron-vite preview",
+    "native-package:demo": "dotenv -e .env.nativedemo -- pnpm run native-build && electron-builder --config.productName=\"Slime Rogue War Demo\" --config.nsis.shortcutName=\"Slime Rogue War Demo\" --config.directories.output=\"electron/dist-demo\" --config.win.artifactName=\"${productName}-Setup-${version}.${ext}\"",
+    "native-package": "dotenv -e .env.native -- pnpm run native-build && electron-builder"
+  },
+  "build": {
+    "appId": "com.war.rogue-slime",
+    "productName": "Slime Rogue War",
+    "directories": {
+      "output": "electron/dist",
+      "buildResources": "electron/resources"
+    },
+    "win": {
+      "icon": "electron/resources/icon.ico",
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Slime Rogue War"
+    },
+    "files": [
+      "electron/out/**/*",
+      "package.json"
+    ]
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-shell": "^2.3.5",
+    "@vueuse/core": "^14.2.1",
+    "@wvdsh/sdk-js": "^0.0.38",
+    "lodash.clonedeep": "^4.5.0",
+    "peerjs": "^1.5.5",
+    "vue": "^3.5.29",
+    "vue-i18n": "^11.2.8",
+    "vue-router": "^5.0.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.6",
+    "@intlify/unplugin-vue-i18n": "^11.0.7",
+    "@tailwindcss/vite": "^4.2.1",
+    "@tauri-apps/cli": "^2.10.1",
+    "@tsconfig/node24": "^24.0.4",
+    "@types/lodash.clonedeep": "^4.5.9",
+    "@types/node": "^24.11.0",
+    "@vitejs/plugin-vue": "^6.0.4",
+    "@vue/language-plugin-pug": "^3.2.5",
+    "@vue/test-utils": "^2.4.6",
+    "@vue/tsconfig": "^0.8.1",
+    "autoprefixer": "^10.4.27",
+    "biome-tailwind-sorter": "^0.2.8",
+    "dotenv-cli": "^11.0.0",
+    "electron": "^41.1.0",
+    "electron-builder": "^26.8.1",
+    "electron-vite": "^5.0.0",
+    "jsdom": "^28.1.0",
+    "npm-run-all2": "^8.0.4",
+    "playwright": "^1.59.1",
+    "postcss": "^8.5.8",
+    "pug": "^3.0.3",
+    "sass": "^1.97.3",
+    "sass-loader": "^16.0.7",
+    "tailwindcss": "^4.2.1",
+    "tsx": "^4.21.0",
+    "typescript": "~5.9.3",
+    "vconsole": "^3.15.1",
+    "vite": "^7.3.1",
+    "vite-bundle-analyzer": "^1.3.8",
+    "vite-bundle-visualizer": "^1.2.1",
+    "vite-plugin-javascript-obfuscator": "^3.1.0",
+    "vite-plugin-vue-devtools": "^8.0.6",
+    "vitest": "^4.1.0",
+    "vue-tsc": "^3.2.5"
+  },
+  "engines": {
+    "node": "^25.5.0 || >=22.12.0"
+  }
+}
