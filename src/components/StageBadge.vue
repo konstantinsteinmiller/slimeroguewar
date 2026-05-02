@@ -12,13 +12,27 @@ interface Props {
   cycleSuffix?: string
   isBoss?: boolean
   arenaType?: ArenaType
+  /** Optional player level chip + XP bar shown below the stage label
+   *  during battle. Pass `playerLevel` and `xpRatio` (0..1) to render
+   *  the bar; omit to hide it for off-battle states. */
+  playerLevel?: number | null
+  xpRatio?: number
+  /** Tooltip-ish "{cur}/{next}" label displayed at the right edge of
+   *  the XP bar. Optional — pass null to hide. */
+  xpLabel?: string | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
   cycleSuffix: '',
   isBoss: false,
-  arenaType: 'default'
+  arenaType: 'default',
+  playerLevel: null,
+  xpRatio: 0,
+  xpLabel: null
 })
+
+const showXpBar = computed(() => props.playerLevel != null)
+const clampedXpRatio = computed(() => Math.max(0, Math.min(1, props.xpRatio)))
 
 const displayName = computed(() => {
   const translated = t(`stages.${props.name}`, props.name)
@@ -165,8 +179,11 @@ const stageTheme = computed<StageTheme>(() => {
           :class="stageTheme.number"
           class="text-sm sm:text-base"
         ) {{ isBoss ? `💀${stageId}` : stageId }}
-      //- Label + name stack
-      div.flex.flex-col.leading-tight
+      //- Label + name stack + (optional) player-level XP bar.
+      //- The XP bar lives inside the badge so it reads as one HUD
+      //- island instead of a floating row underneath. Hidden in
+      //- off-battle states by gating on `playerLevel != null`.
+      div(class="flex flex-col leading-tight min-w-[5.5rem] sm:min-w-[7rem]")
         span.font-black.uppercase.tracking-wider.game-text.text-white(
           class="text-[9px] sm:text-[11px] opacity-90"
         ) {{ isBoss ? t('bossStage') : t('stage') + ' ' + stageId }}
@@ -174,4 +191,17 @@ const stageTheme = computed<StageTheme>(() => {
           :class="stageTheme.accent"
           class="text-[10px] sm:text-xs"
         ) {{ displayName }}
+        //- Player level + XP fill — slimmer than a bottom HUD bar so
+        //- it tucks under the stage name without growing the badge.
+        div(
+          v-if="showXpBar"
+          class="mt-1 flex items-center gap-1"
+        )
+          span(class="bg-black/55 text-amber-200 font-black rounded-sm px-1 leading-tight game-text text-[8px] sm:text-[10px]") Lv {{ playerLevel }}
+          div(class="relative flex-1 rounded-full bg-black/55 overflow-hidden border border-black/60" style="height: 5px;")
+            div(
+              class="absolute inset-y-0 left-0 bg-gradient-to-r from-purple-400 to-fuchsia-300 transition-all"
+              :style="{ width: `${clampedXpRatio * 100}%` }"
+            )
+          span(v-if="xpLabel" class="text-amber-200 font-bold game-text text-[7px] sm:text-[9px] opacity-80") {{ xpLabel }}
 </template>

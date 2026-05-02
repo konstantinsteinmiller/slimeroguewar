@@ -1,20 +1,14 @@
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router'
 import { isWeb } from '@/use/useUser'
-import { isDebug } from '@/use/useMatch.ts'
 
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'main-menu',
-    component: () => import('@/views/SpinnerArena.vue')/*, redirect: 'battle'*/,
+    component: () => import('@/views/SlimeArena.vue'),
     children: []
   },
-  { path: '/battle', name: 'battle', component: () => import('@/views/SpinnerArena.vue') },
-  // ...isDebug.value ? [
-  //   { path: '/crit-test', name: 'crit-test', component: () => import('@/views/CritTestScene.vue') },
-  //   { path: '/power-up', name: 'power-up', component: () => import('@/views/PowerupTestScene.vue') },
-  //   { path: '/trailer', name: 'trailer', component: () => import('@/views/TrailerScene.vue') }
-  // ] : []
+  { path: '/battle', name: 'battle', component: () => import('@/views/SlimeArena.vue') }
 ]
 
 const router = createRouter({
@@ -39,7 +33,7 @@ router.beforeEach((to, from) => {
   if (isWeb) {
     const isFullVersion = url.includes(remoteURL + '/slime-rogue-war/') && !url.includes('/slime-rogue-war/demo/') && !url.includes('/slime-rogue-war/develop/')
     const isDevelopVersion = url.includes(remoteURL + '/slime-rogue-war/develop/')
-    const isDev = url.includes('localhost:5173/')
+    const isDev = url.includes('localhost:6000/')
 
     if (isDev) {
       return true

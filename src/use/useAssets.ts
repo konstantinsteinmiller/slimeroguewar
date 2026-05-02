@@ -1,9 +1,5 @@
 import { ref } from 'vue'
-import { modelImgPath, SPINNER_MODEL_IDS, getSelectedSkin } from '@/use/useModels.ts'
-import useSpinnerConfig from '@/use/useSpinnerConfig.ts'
-import useSpinnerCampaign from '@/use/useSpinnerCampaign.ts'
 import { prependBaseUrl } from '@/utils/function.ts'
-import type { TopPartId } from '@/types/spinner'
 
 // Shared state so it can be accessed by both the loader and the progress component
 const loadingProgress = ref(0)
@@ -152,7 +148,29 @@ const STATIC_IMAGES = [
   'images/icons/chest_128x128.webp',
   'images/icons/trophy_128x128.webp',
   'images/bg/parchment-ribbon_553x188.webp',
-  'images/bg/bg-tile_400x400.webp'
+  'images/bg/bg-tile_400x400.webp',
+  // Arena play-field background — tiled inside the canvas via
+  // `ctx.createPattern`. Preloaded so the first frame already paints
+  // the textured floor instead of the procedural grid fallback.
+  'images/bg/bg_1024x1024.webp',
+  // Slime + bullet sprites are tiny and on the gameplay hot path —
+  // baking them into the splash-blocking tier means the first frame
+  // of combat already shows artwork, not the procedural fallback.
+  // Player sprite is split off the shared mob artwork so the hero
+  // reads as visually distinct from the swarm.
+  'images/models/slimes/player_256x256.webp',
+  'images/models/slimes/player_128x128.webp',
+  'images/models/slimes/slime_256x256.webp',
+  'images/models/slimes/slime_128x128.webp',
+  'images/models/slimes/slime-tower_256x256.webp',
+  'images/models/slimes/slime-tower_128x128.webp',
+  'images/models/bullet_256x256.png',
+  'images/models/bullet_128x128.png',
+  // Slime-drop currency icon — referenced by HUD badges, drop pickups
+  // on the canvas, the coin-explosion VFX and the roulette wheel
+  // segments. Preloading guarantees no first-paint flicker.
+  'images/models/slime-drop_256x256.webp',
+  'images/models/slime-drop_128x128.webp'
 ]
 
 const VFX_ASSETS = [
@@ -185,44 +203,11 @@ const MUSIC_ASSETS = [
   'audio/music/battle-3.ogg',
 ]
 
-/**
- * Skin IDs the player will see IMMEDIATELY on first paint:
- *   • both player-team slots (resolved via getSelectedSkin — falls back to the
- *     default catalog skin when no selection has been persisted yet, which
- *     covers the very first load).
- *   • every enemy in the current campaign stage (stored on each StageBladeConfig).
- *
- * Everything else (the other ~40 skins in the config modal catalog, future
- * stages the player hasn't unlocked yet) is deferred to `preloadRemainingSkins`
- * which runs in the background once the arena is interactive.
- */
-const getCriticalSkinIds = (): Set<string> => {
-  const ids = new Set<string>()
-  try {
-    const { playerTeam } = useSpinnerConfig()
-    playerTeam.value.forEach((cfg, slotIndex) => {
-      // modelId override wins; otherwise resolve the player's chosen skin for
-      // this top part. getSelectedSkin always returns a valid id (default on
-      // first load).
-      const id = cfg.modelId ?? getSelectedSkin(cfg.topPartId as TopPartId, slotIndex)
-      if (id) ids.add(id)
-    })
-  } catch (e) {
-    console.warn('[assets] player team resolve failed, using no player skins', e)
-  }
-  try {
-    const { currentStage } = useSpinnerCampaign()
-    const stage = currentStage.value
-    if (stage?.enemyTeam) {
-      for (const enemy of stage.enemyTeam) {
-        if (enemy.modelId) ids.add(enemy.modelId)
-      }
-    }
-  } catch (e) {
-    console.warn('[assets] stage resolve failed, using no stage skins', e)
-  }
-  return ids
-}
+// Slime build draws every character procedurally — no per-stage critical
+// skin set. The few static UI images above (logo, parchment, settings)
+// are the entire splash-blocking image tier. If a future build drops in
+// /public/images/slimes/{kind}.webp overrides, the renderer demand-loads
+// them via getCachedImage so they don't need to be in the splash tier.
 
 type AssetEntry = { src: string; type: 'image' | 'audio' }
 
@@ -288,29 +273,22 @@ const runInChunks = async (assets: AssetEntry[], chunkSize: number, onLoaded?: (
   }
 }
 
-// Tracks in-flight background skin preload so repeat triggers noop and the
-// config modal can await it if opened early.
-let remainingSkinsPromise: Promise<void> | null = null
-
-// Same idea for the SFX + VFX tier — callers that really need to know
-// when every effect is in memory (e.g. a test suite) can await this.
+// Cached promise for the SFX+VFX tier so concurrent callers share the
+// same in-flight decode set.
 let deferredAssetsPromise: Promise<void> | null = null
 
 export default () => {
   const preloadAssets = async () => {
     if (areAllAssetsLoaded.value) return
 
-    const criticalSkinIds = getCriticalSkinIds()
-    const criticalSkinPaths = [...criticalSkinIds].map(id => modelImgPath(id))
-
-    // Splash-critical tier only: UI chrome + the skins rendered on first
-    // paint. SFX and VFX spritesheets are kicked off as a background
-    // chain below so the loader can hit 100% as soon as the player can
-    // actually see something.
-    const criticalAssets: AssetEntry[] = [
-      ...STATIC_IMAGES.map(src => ({ src: prependBaseUrl(src), type: 'image' as const })),
-      ...criticalSkinPaths.map(src => ({ src, type: 'image' as const }))
-    ]
+    // Splash-critical tier: UI chrome only. The slime characters are
+    // drawn procedurally on the canvas, so there are no per-stage
+    // bitmap dependencies on the hot path. SFX + VFX are deferred so
+    // the loader hits 100% the instant the UI bitmaps are decoded.
+    const criticalAssets: AssetEntry[] = STATIC_IMAGES.map(src => ({
+      src: prependBaseUrl(src),
+      type: 'image' as const
+    }))
 
     let loadedCount = 0
     const totalCount = criticalAssets.length
@@ -368,56 +346,13 @@ export default () => {
     return deferredAssetsPromise
   }
 
-  /**
-   * Prefetch a specific set of skins by modelId. Used to warm the cache
-   * for the NEXT campaign stage's enemies while the player is on the
-   * reward screen — typically ~3 s of idle wall-time, plenty for 2-4
-   * decodes. Skips ids already in the cache; returns a promise that
-   * resolves once every missing skin has decoded so callers can chain on
-   * it if they want, but the intended use is fire-and-forget.
-   */
-  const preloadSkinsByIds = (ids: string[]): Promise<void> => {
-    const entries: AssetEntry[] = []
-    const seen = new Set<string>()
-    for (const id of ids) {
-      const src = modelImgPath(id)
-      if (seen.has(src) || resourceCache.images.has(src)) continue
-      seen.add(src)
-      entries.push({ src, type: 'image' as const })
-    }
-    if (entries.length === 0) return Promise.resolve()
-    return runInChunks(entries, 4).catch((e) => {
-      console.error('Targeted skin preload failed:', e)
-    }) as Promise<void>
-  }
-
-  /**
-   * Fire-and-forget background loader for every skin NOT in the critical set.
-   * Safe to call multiple times — concurrent calls share the same in-flight
-   * promise. Callers (e.g. the skin config modal) can `await` the returned
-   * promise if they need to be sure everything's cached before rendering a
-   * gallery.
-   */
-  const preloadRemainingSkins = (): Promise<void> => {
-    if (remainingSkinsPromise) return remainingSkinsPromise
-
-    const remaining: AssetEntry[] = SPINNER_MODEL_IDS
-      .map(id => modelImgPath(id))
-      .filter(src => !resourceCache.images.has(src))
-      .map(src => ({ src, type: 'image' as const }))
-
-    if (remaining.length === 0) {
-      remainingSkinsPromise = Promise.resolve()
-      return remainingSkinsPromise
-    }
-
-    // Smaller chunks than the critical preloader so we don't starve the main
-    // thread / network while the player is already interacting with the arena.
-    remainingSkinsPromise = runInChunks(remaining, 4).catch((e) => {
-      console.error('Background skin preload failed:', e)
-    }) as Promise<void>
-    return remainingSkinsPromise
-  }
+  // Stubs kept for API parity with the chaos-arena build. Old call
+  // sites in the codebase still reference these, but slime-rogue-war
+  // draws everything procedurally, so the implementations are no-ops
+  // that resolve immediately. Avoids cascading edits while we delete
+  // the legacy spinner UI.
+  const preloadSkinsByIds = (_ids: string[]): Promise<void> => Promise.resolve()
+  const preloadRemainingSkins = (): Promise<void> => Promise.resolve()
 
   return {
     loadingProgress,
@@ -426,6 +361,6 @@ export default () => {
     preloadDeferredAssets,
     preloadRemainingSkins,
     preloadSkinsByIds,
-    resourceCache // Export this if you want to debug memory usage
+    resourceCache
   }
 }

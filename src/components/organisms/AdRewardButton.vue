@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import IconCoin from '@/components/icons/IconCoin.vue'
+import IconSlimeDrop from '@/components/icons/IconSlimeDrop.vue'
 import { isRewardedReady, showRewardedAd } from '@/use/useAds'
 import useSpinnerConfig from '@/use/useSpinnerConfig'
 
@@ -85,7 +85,7 @@ const grantReward = () => {
       )
         div.flex.items-center.gap-1
           span.font-black.game-text.leading-tight(class="text-[10px] sm:text-xs") +{{ coins }}
-          IconCoin.inline(class="w-4 h-4 text-yellow-300")
+          IconSlimeDrop(class="inline w-4 h-4")
         img.object-contain(
           src="/images/icons/movie_128x96.webp"
           class="h-5 w-5 sm:h-5 sm:w-5"

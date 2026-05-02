@@ -141,10 +141,10 @@ export default {
   'next': 'Next',
   'page': 'Page',
   'spinner': {
-    'youWin': 'YOU WIN!',
-    'youLose': 'YOU LOSE!',
+    'youWin': 'STAGE CLEAR!',
+    'youLose': 'DEFEATED!',
     'rewards': 'REWARDS',
-    'coins': 'Coins',
+    'coins': 'Slime Drops',
     'playAgain': 'Play Again',
     'buildTeam': 'Build Team',
     'tapToStart': 'Tap to Start',

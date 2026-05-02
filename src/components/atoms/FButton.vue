@@ -9,6 +9,9 @@ interface Props {
   colorFrom?: string
   colorTo?: string
   shadowColor?: string
+  /** Sizing token. We tune via clamp() ranges (vw/rem) so every size
+   *  works on phone portrait, phone landscape, tablet and desktop
+   *  without the old scale-60/80/110/120 kludges. */
   size?: 'sm' | 'md' | 'lg' | 'xl'
   attention?: boolean
 }
@@ -39,25 +42,16 @@ const theme = computed(() => {
   }
 })
 
-// Compute container scaling and layout
-const containerClasses = computed(() => {
-  const isBrawl = props.variant === 'brawl'
-  return {
-    'w-full': true,
-    'flex justify-center': isBrawl,
-    // Brawl specific scaling
-    'scale-75': isBrawl && props.size === 'sm',
-    'scale-90': isBrawl && props.size === 'md',
-    'scale-125': isBrawl && props.size === 'xl',
-    // Default specific scaling
-    'scale-60': !isBrawl && props.size === 'sm',
-    'scale-80': !isBrawl && props.size === 'md',
-    'scale-110': props.size === 'lg',
-    'scale-120': !isBrawl && props.size === 'xl',
-    'attention-bounce': props.attention,
-    'opacity-50 grayscale pointer-events-none': props.isDisabled
-  }
-})
+const sizeClass = computed(() => `f-button--${props.size ?? 'md'}`)
+const variantClass = computed(() => `f-button--${props.variant}`)
+
+const containerClasses = computed(() => ({
+  'f-button-container': true,
+  [variantClass.value]: true,
+  [sizeClass.value]: true,
+  'attention-bounce': props.attention,
+  'is-disabled': props.isDisabled
+}))
 </script>
 
 <template lang="pug">
@@ -78,22 +72,25 @@ const containerClasses = computed(() => {
         :class="[\
           variant === 'brawl' \
             ? 'translate-y-[3px] w-full h-full rounded-xl' \
-            : 'absolute inset-0 translate-y-[3px] md:translate-y-[3px] rounded-2xl'\
+            : 'absolute inset-0 translate-y-[3px] rounded-2xl'\
         ]"
         class="absolute inset-0"
       )
 
-      //- The Main Button Body
+      //- The Main Button Body — sizing now driven by CSS clamp() in <style>,
+      //- not Tailwind scale-XX hacks. Each size token defines its own
+      //- min-width / padding / font-size so the button never collapses
+      //- to 0 width and never overflows its container.
       span.f-button-body(
         :style="{ backgroundImage: `linear-gradient(to bottom, ${theme.from}, ${theme.to})` }"
         :class="[\
           variant === 'brawl' \
-            ? 'min-w-[120px] md:min-w-[180px] border-b-[3px] border-black/20 px-8 py-3 md:py-4 rounded-lg' \
-            : 'min-w-[80px] md:min-w-[140px] rounded-xl md:rounded-2xl border-[2px] border-[#0f1a30] px-4 md:px-6 py-2 md:py-3'\
+            ? 'border-b-[3px] border-black/20 rounded-lg' \
+            : 'rounded-2xl border-[2px] border-[#0f1a30]'\
         ]"
         class="relative block"
       )
-        //- Inner Top Shine (The classic game shine)
+        //- Inner Top Shine
         span(
           :class="[\
             variant === 'brawl' \
@@ -108,8 +105,8 @@ const containerClasses = computed(() => {
           span.text(
             :class="[\
               variant === 'brawl' \
-                ? 'text-lg md:text-2xl tracking-tighter italic' \
-                : 'text-sm md:text-xl tracking-wide'\
+                ? 'tracking-tighter italic' \
+                : 'tracking-wide'\
             ]"
             class="relative block text-white uppercase font-black"
           )
@@ -123,6 +120,68 @@ button
 .text
   // Thick gaming-style text outline
   text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000
+
+// ─── Responsive sizing tokens ─────────────────────────────────────────────
+// Each size uses clamp() to scale fluidly between phone-portrait,
+// phone-landscape and desktop. Min/max guards make sure the button is
+// never narrower than a touch target (44px) and never wider than
+// makes sense for its slot.
+
+.f-button-container
+  width: 100%
+  display: flex
+  justify-content: center
+
+  &.f-button--brawl
+    display: flex
+  // Brawl buttons re-skew the body inward — adjust min-width up
+  // because the skew compresses the visual width.
+
+  // ── Sizes ──
+  .f-button-body
+    min-width: clamp(80px, 18vw, 140px)
+    padding: clamp(0.45rem, 1.6vw, 0.8rem) clamp(0.9rem, 2.4vw, 1.5rem)
+  .text
+    font-size: clamp(0.85rem, 2.4vw, 1.15rem)
+
+  &.f-button--sm
+    .f-button-body
+      min-width: clamp(70px, 14vw, 110px)
+      padding: clamp(0.32rem, 1.1vw, 0.55rem) clamp(0.7rem, 1.8vw, 1.1rem)
+    .text
+      font-size: clamp(0.75rem, 1.9vw, 0.95rem)
+
+  &.f-button--lg
+    .f-button-body
+      min-width: clamp(110px, 24vw, 200px)
+      padding: clamp(0.6rem, 2vw, 1rem) clamp(1.2rem, 3vw, 2rem)
+    .text
+      font-size: clamp(1rem, 3vw, 1.4rem)
+
+  &.f-button--xl
+    .f-button-body
+      min-width: clamp(140px, 30vw, 260px)
+      padding: clamp(0.75rem, 2.4vw, 1.2rem) clamp(1.4rem, 3.4vw, 2.4rem)
+    .text
+      font-size: clamp(1.15rem, 3.5vw, 1.6rem)
+
+  // Brawl variant tweaks: italics + slight extra padding so the skewed
+  // edge doesn't crowd the text.
+  &.f-button--brawl
+    .f-button-body
+      padding-left: clamp(1.4rem, 3.6vw, 2.4rem)
+      padding-right: clamp(1.4rem, 3.6vw, 2.4rem)
+      border-radius: 0.5rem
+    &.f-button--md .text
+      font-size: clamp(0.95rem, 2.6vw, 1.25rem)
+    &.f-button--lg .text
+      font-size: clamp(1.1rem, 3vw, 1.55rem)
+
+  // Disabled state preserved.
+  &.is-disabled
+    opacity: 0.5
+    filter: grayscale(1)
+    pointer-events: none
 
 .attention-bounce
   animation: bounce 0.6s infinite alternate

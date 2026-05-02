@@ -1,61 +1,44 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { SKINS_PER_TOP, SPECIAL_SKINS, isModelFullyOwned, buySkin, modelImgPath } from '@/use/useModels'
-import type { SpinnerModelId } from '@/use/useModels'
-import type { TopPartId } from '@/types/spinner'
-import { resourceCache } from '@/use/useAssets'
+import { ref, onMounted, watch, nextTick } from 'vue'
 import { isRewardedReady, showRewardedAd } from '@/use/useAds'
+import { getCachedImage } from '@/use/useAssets'
+import { SLIME_DROP_IMG } from '@/use/useSlimeRenderer'
 
 export interface RouletteResult {
-  type: 'multiplier' | 'skin'
-  multiplier?: number
-  skin?: { topPartId: TopPartId; modelId: SpinnerModelId }
+  type: 'multiplier'
+  multiplier: number
 }
 
 interface Segment {
-  kind: 'multiplier' | 'skin'
+  kind: 'multiplier'
   color: string
   result: RouletteResult
-  imgSrc?: string
   label: string
   weight: number
 }
 
+const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{
+  (e: 'update:modelValue', value: boolean): void
   (e: 'result', value: RouletteResult): void
 }>()
+const closeOverlay = () => emit('update:modelValue', false)
 
 // ─── Build segments ─────────────────────────────────────────────────────────
-// 13 segments total:
-//   3x 0.5x, 3x 1x, 2x 1.5x, 1x 2x, 1x 3x  (10 multiplier)
-//   2x normal skin, 1x special skin            (3 skin)
+// 12 evenly-spaced multiplier wedges. Slime build has no skins yet, so
+// every wedge pays out in slime drops — varied multipliers keep the
+// suspense without coupling to a skin catalog.
 
 const MULTIPLIER_DEFS: { label: string; multiplier: number; color: string; count: number; weight: number }[] = [
-  { label: '0.5x', multiplier: 0.5, color: '#dc2626', count: 3, weight: 8.33 },
-  { label: '1x', multiplier: 1, color: '#2563eb', count: 3, weight: 16.67 },
-  { label: '1.5x', multiplier: 1.5, color: '#16a34a', count: 2, weight: 7.5 },
-  { label: '2x', multiplier: 2, color: '#d97706', count: 1, weight: 10 },
-  { label: '3x', multiplier: 3, color: '#a855f7', count: 1, weight: 3 }
+  { label: '0.5x', multiplier: 0.5, color: '#dc2626', count: 3, weight: 12 },
+  { label: '1x',   multiplier: 1,   color: '#2563eb', count: 3, weight: 18 },
+  { label: '1.5x', multiplier: 1.5, color: '#16a34a', count: 3, weight: 12 },
+  { label: '2x',   multiplier: 2,   color: '#d97706', count: 2, weight: 8 },
+  { label: '3x',   multiplier: 3,   color: '#a855f7', count: 1, weight: 4 }
 ]
-
-const getUnownedSkins = (): { topPartId: TopPartId; modelId: SpinnerModelId; isSpecial: boolean }[] => {
-  const result: { topPartId: TopPartId; modelId: SpinnerModelId; isSpecial: boolean }[] = []
-  const seen = new Set<string>()
-  for (const [topPartId, skins] of Object.entries(SKINS_PER_TOP)) {
-    for (const modelId of skins) {
-      if (seen.has(modelId)) continue
-      seen.add(modelId)
-      if (!isModelFullyOwned(modelId)) {
-        result.push({ topPartId: topPartId as TopPartId, modelId, isSpecial: SPECIAL_SKINS.has(modelId) })
-      }
-    }
-  }
-  return result
-}
 
 const buildSegments = (): Segment[] => {
   const segments: Segment[] = []
-
   for (const def of MULTIPLIER_DEFS) {
     for (let c = 0; c < def.count; c++) {
       segments.push({
@@ -67,37 +50,6 @@ const buildSegments = (): Segment[] => {
       })
     }
   }
-
-  const unowned = getUnownedSkins()
-  const normalSkins = unowned.filter(s => !s.isSpecial).sort(() => Math.random() - 0.5)
-  const specialSkins = unowned.filter(s => s.isSpecial).sort(() => Math.random() - 0.5)
-
-  const skinColors = ['#db2777', '#0891b2']
-  const normalSlots = Math.min(2, normalSkins.length)
-  for (let i = 0; i < normalSlots; i++) {
-    const skin = normalSkins[i]!
-    segments.push({
-      kind: 'skin',
-      label: '',
-      color: skinColors[i]!,
-      result: { type: 'skin', skin: { topPartId: skin.topPartId, modelId: skin.modelId } },
-      imgSrc: modelImgPath(skin.modelId),
-      weight: 5
-    })
-  }
-
-  if (specialSkins.length > 0) {
-    const special = specialSkins[0]!
-    segments.push({
-      kind: 'skin',
-      label: '',
-      color: '#fbbf24',
-      result: { type: 'skin', skin: { topPartId: special.topPartId, modelId: special.modelId } },
-      imgSrc: modelImgPath(special.modelId),
-      weight: 1
-    })
-  }
-
   return segments.sort(() => Math.random() - 0.5)
 }
 
@@ -131,40 +83,43 @@ const CENTER_X = WHEEL_SIZE / 2
 const CENTER_Y = WHEEL_SIZE / 2 + ARROW_HEIGHT
 const RADIUS = WHEEL_SIZE / 2 - 8
 
-// ─── Image cache ────────────────────────────────────────────────────────────
-
-const skinImages = new Map<string, HTMLImageElement>()
-const preloadImages = () => {
-  for (const seg of segments.value) {
-    if (seg.imgSrc && !skinImages.has(seg.imgSrc)) {
-      const cached = resourceCache.images.get(seg.imgSrc)
-      if (cached) {
-        skinImages.set(seg.imgSrc, cached)
-      } else {
-        const img = new Image()
-        img.src = seg.imgSrc
-        skinImages.set(seg.imgSrc, img)
-      }
-    }
-  }
-}
-
 // ─── Canvas drawing ─────────────────────────────────────────────────────────
 
-const drawCoinIcon = (ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number) => {
+/**
+ * Slime-drop glyph drawn onto the wheel canvas. Prefers the bundled
+ * bitmap (`/public/images/models/slime-drop_*.webp`) — falls back to
+ * a procedural drop silhouette when the asset isn't decoded yet.
+ */
+const drawSlimeDropIcon = (ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number) => {
+  const sprite = getCachedImage(SLIME_DROP_IMG)
+  if (sprite && sprite.complete && sprite.naturalWidth > 0) {
+    const d = size * 2.2
+    ctx.drawImage(sprite, cx - d / 2, cy - d / 2, d, d)
+    return
+  }
+  ctx.save()
+  ctx.translate(cx, cy)
+  ctx.fillStyle = '#0d2200'
   ctx.beginPath()
-  ctx.arc(cx, cy, size, 0, Math.PI * 2)
-  ctx.fillStyle = '#000'
+  ctx.moveTo(0, -size)
+  ctx.bezierCurveTo(size, -0.05 * size, size, 0.85 * size, 0, size)
+  ctx.bezierCurveTo(-size, 0.85 * size, -size, -0.05 * size, 0, -size)
   ctx.fill()
+  const grad = ctx.createRadialGradient(-size * 0.3, -size * 0.3, size * 0.15, 0, 0, size)
+  grad.addColorStop(0, '#e6ffb0')
+  grad.addColorStop(0.55, '#65b30a')
+  grad.addColorStop(1, '#3d6f00')
+  ctx.fillStyle = grad
   ctx.beginPath()
-  ctx.arc(cx, cy, size * 0.9, 0, Math.PI * 2)
-  ctx.fillStyle = '#facc15'
+  ctx.moveTo(0, -size * 0.85)
+  ctx.bezierCurveTo(size * 0.85, -0.04 * size, size * 0.85, 0.78 * size, 0, size * 0.88)
+  ctx.bezierCurveTo(-size * 0.85, 0.78 * size, -size * 0.85, -0.04 * size, 0, -size * 0.85)
   ctx.fill()
-  ctx.fillStyle = '#2f920e'
-  ctx.font = `bold ${Math.round(size * 1.3)}px sans-serif`
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText('$', cx, cy + 1)
+  ctx.fillStyle = 'rgba(255,255,255,0.55)'
+  ctx.beginPath()
+  ctx.ellipse(-size * 0.3, -size * 0.45, size * 0.18, size * 0.32, -0.4, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
 }
 
 const drawWheel = (rotation: number) => {
@@ -228,24 +183,15 @@ const drawWheel = (rotation: number) => {
 
     ctx.save()
     ctx.rotate(startAngle + arcSize / 2)
-
-    if (seg.kind === 'skin' && seg.imgSrc) {
-      const img = skinImages.get(seg.imgSrc)
-      if (img?.complete) {
-        const imgSize = 28
-        ctx.drawImage(img, RADIUS * 0.5 - imgSize / 2, -imgSize / 2, imgSize, imgSize)
-      }
-    } else {
-      drawCoinIcon(ctx, RADIUS * 0.72, 0, 8)
-      ctx.fillStyle = '#fff'
-      ctx.font = 'bold 13px sans-serif'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.shadowColor = 'rgba(0,0,0,0.6)'
-      ctx.shadowBlur = 4
-      ctx.fillText(seg.label, RADIUS * 0.45, 0)
-      ctx.shadowBlur = 0
-    }
+    drawSlimeDropIcon(ctx, RADIUS * 0.72, 0, 9)
+    ctx.fillStyle = '#fff'
+    ctx.font = 'bold 13px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.shadowColor = 'rgba(0,0,0,0.6)'
+    ctx.shadowBlur = 4
+    ctx.fillText(seg.label, RADIUS * 0.45, 0)
+    ctx.shadowBlur = 0
     ctx.restore()
   }
 
@@ -279,11 +225,9 @@ const canShowAd = () => isRewardedReady.value
 /** Emit the stored result and finalize. */
 const finalizeResult = () => {
   if (!lastResult.value) return
-  const result = lastResult.value
-  if (result.type === 'skin' && result.skin) {
-    buySkin(result.skin.topPartId, result.skin.modelId)
-  }
-  emit('result', result)
+  emit('result', lastResult.value)
+  // Auto-close so the gameplay HUD comes back without an extra tap.
+  closeOverlay()
 }
 
 const spin = () => {
@@ -345,7 +289,6 @@ const onAdRespin = async () => {
   const ok = await showRewardedAd()
   if (ok) {
     segments.value = buildSegments()
-    preloadImages()
     requestAnimationFrame(() => {
       drawWheel(currentRotation.value)
       setTimeout(spin, 300)
@@ -356,43 +299,73 @@ const onAdRespin = async () => {
   }
 }
 
-onMounted(() => {
-  preloadImages()
-  requestAnimationFrame(() => {
-    drawWheel(currentRotation.value)
-    setTimeout(spin, 500)
+const startWheel = () => {
+  // Reset internal state so reopening the wheel always starts a fresh
+  // spin rather than carrying state from the previous session.
+  isSpinning.value = false
+  spinCount.value = 0
+  showAdButton.value = false
+  lastResult.value = null
+  segments.value = buildSegments()
+  nextTick(() => {
+    requestAnimationFrame(() => {
+      drawWheel(currentRotation.value)
+      setTimeout(spin, 500)
+    })
   })
+}
+
+watch(() => props.modelValue, (open) => {
+  if (open) startWheel()
+})
+
+onMounted(() => {
+  if (props.modelValue) startWheel()
 })
 </script>
 
 <template lang="pug">
-  div.flex.flex-col.items-center
-    div.relative
-      canvas(
-        ref="canvasRef"
-        :style="{ width: WHEEL_SIZE + 'px', height: CANVAS_HEIGHT + 'px' }"
+  Teleport(to="body")
+    Transition(name="fade")
+      div(
+        v-if="modelValue"
+        class="roulette-overlay fixed inset-0 z-[110] flex flex-col items-center justify-center bg-black/75 backdrop-blur-sm"
+        :style="{\
+          paddingTop: 'calc(0.75rem + env(safe-area-inset-top, 0px))',\
+          paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))',\
+          paddingLeft: 'calc(0.75rem + env(safe-area-inset-left, 0px))',\
+          paddingRight: 'calc(0.75rem + env(safe-area-inset-right, 0px))'\
+        }"
       )
-    //- Fixed-height slot — no layout shift
-    div.flex.flex-col.items-center.gap-2(class="min-h-[3rem]")
-      span.text-white.font-bold.game-text.uppercase.tracking-wider.animate-pulse(
-        v-if="isSpinning"
-        class="text-sm"
-      ) Spinning...
-      //- Post-first-spin: ad respin + skip — laid out side-by-side so the
-      //- "Skip" link sits inline with the "Spin Again" CTA instead of
-      //- stacking under it.
-      div.flex.items-center.gap-3(v-if="showAdButton")
-        button.cursor-pointer.rounded-lg.border-2.font-bold.flex.items-center.gap-2.transition-transform(
-          class="px-3 py-1.5 text-sm bg-gradient-to-b from-[#ffcd00] to-[#f7a000] border-[#0f1a30] text-white hover:scale-105 active:scale-95"
-          @click="onAdRespin"
-        )
-          img.object-contain(
-            src="/images/icons/movie_128x96.webp"
-            class="h-5 w-5"
+        div(class="text-amber-300 font-black uppercase tracking-widest game-text text-sm sm:text-base mb-2") Bonus Spin
+        div.relative
+          canvas(
+            ref="canvasRef"
+            :style="{ width: WHEEL_SIZE + 'px', height: CANVAS_HEIGHT + 'px', maxWidth: '85vw', maxHeight: '60vh' }"
           )
-          span.game-text Spin Again
-        button.text-white.font-bold.game-text.uppercase.tracking-wider.cursor-pointer.underline.opacity-60(
-          class="text-xs hover:opacity-100"
-          @click="onSkipAd"
-        ) Skip
+        //- Fixed-height status slot — no layout shift between spinning / ad / done
+        div(class="flex flex-col items-center gap-2 mt-4 min-h-[3rem]")
+          span(
+            v-if="isSpinning"
+            class="text-white font-bold game-text uppercase tracking-wider animate-pulse text-sm"
+          ) Spinning...
+          //- Post-first-spin: ad respin + skip
+          div(v-if="showAdButton" class="flex items-center gap-3")
+            button(
+              class="cursor-pointer rounded-lg border-2 font-bold flex items-center gap-2 transition-transform px-3 py-1.5 text-sm bg-gradient-to-b from-[#ffcd00] to-[#f7a000] border-[#0f1a30] text-white hover:scale-105 active:scale-95"
+              @click="onAdRespin"
+            )
+              img(src="/images/icons/movie_128x96.webp" class="object-contain h-5 w-5")
+              span(class="game-text") Spin Again
+            button(
+              class="text-white font-bold game-text uppercase tracking-wider cursor-pointer underline opacity-60 text-xs hover:opacity-100"
+              @click="onSkipAd"
+            ) Skip
 </template>
+
+<style scoped lang="sass">
+.fade-enter-active, .fade-leave-active
+  transition: opacity 0.25s ease
+.fade-enter-from, .fade-leave-to
+  opacity: 0
+</style>

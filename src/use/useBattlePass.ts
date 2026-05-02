@@ -153,7 +153,11 @@ export const bpCoinReward = (stage: number): number => {
   return Math.round(raw / 5) * 5
 }
 
-export const bpIsSkinStage = (stage: number): boolean => BP_SKIN_STAGES.has(stage)
+// Slime build has no skins yet — every BP stage rewards drops only.
+// Keeping the symbol exported so the BattlePass.vue UI keeps compiling
+// against the chaos-arena-shaped API while every "skin slot" branch
+// downstream sees `false` and renders the slime-drop icon instead.
+export const bpIsSkinStage = (_stage: number): boolean => false
 
 // ─── Skin helpers (mirrors DailyRewards) ───────────────────────────────────
 
@@ -220,39 +224,21 @@ export interface ClaimResult {
   skin: SpinnerModelId | null
 }
 
-const claimStage = (stage: number, offeredSkin?: SpinnerModelId | null): ClaimResult | null => {
+const claimStage = (stage: number, _offeredSkin?: SpinnerModelId | null): ClaimResult | null => {
   if (stage < 1 || stage > BP_TOTAL_STAGES) return null
   if (stage > state.value.unlockedStages) return null
   if (state.value.claimedStages.includes(stage)) return null
 
-  let coins = 0
-  let skin: SpinnerModelId | null = null
-
-  if (bpIsSkinStage(stage)) {
-    const pool = unownedSkinModelIds()
-    // Prefer the skin that was previewed to the player, fall back to random
-    if (offeredSkin && pool.includes(offeredSkin)) {
-      skin = offeredSkin
-    } else if (pool.length > 0) {
-      skin = pool[Math.floor(Math.random() * pool.length)]!
-    }
-    if (skin) {
-      unlockSkinEverywhere(skin)
-      state.value.claimedSkins = { ...state.value.claimedSkins, [stage]: skin }
-    } else {
-      // Fallback: no unowned skins left — pay out the linear coin value
-      // so the stage slot never feels empty.
-      coins = bpCoinReward(stage)
-      addCoins(coins)
-    }
-  } else {
-    coins = bpCoinReward(stage)
-    addCoins(coins)
-  }
+  // Slime build pays every stage in slime drops only. The former skin
+  // stages now grant a 2× drop bonus so the milestone slots still feel
+  // exciting without requiring a skin catalog (skins ship later).
+  const baseCoins = bpCoinReward(stage)
+  const coins = bpIsSkinStage(stage) ? baseCoins * 2 : baseCoins
+  addCoins(coins)
 
   state.value.claimedStages = [...state.value.claimedStages, stage]
   saveState()
-  return { stage, coins, skin }
+  return { stage, coins, skin: null }
 }
 
 // ─── Derived ────────────────────────────────────────────────────────────────

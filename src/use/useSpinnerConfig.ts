@@ -179,9 +179,16 @@ const saveTeam = (team: SpinnerConfig[]) => {
   localStorage.setItem(TEAM_KEY, JSON.stringify(team))
 }
 
+// Delegated to useSlimeDrops via the legacy listener registered in
+// `slimeDropsBridge.ts`. Both modules write to the same localStorage
+// key (COINS_KEY) and both expose their own reactive `Ref<number>`,
+// so the bridge keeps them in lock-step without creating an import
+// cycle between the two composables.
+import { notifyLegacyDropChange } from '@/use/slimeDropsBridge'
 const addCoins = (amount: number) => {
   coins.value += amount
   localStorage.setItem(COINS_KEY, coins.value.toString())
+  notifyLegacyDropChange(amount)
 }
 
 const markFirstWin = () => {

@@ -3,7 +3,7 @@ import { ref, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import FModal from '@/components/molecules/FModal.vue'
 import FIconButton from '@/components/atoms/FIconButton.vue'
-import IconCoin from '@/components/icons/IconCoin.vue'
+import IconSlimeDrop from '@/components/icons/IconSlimeDrop.vue'
 import useBattlePass, {
   BP_TOTAL_STAGES,
   BP_XP_PER_STAGE
@@ -436,9 +436,9 @@ const onStripPointerUp = (e: PointerEvent) => {
             template(v-else-if="card.isSkin")
               //- Skin stage but no unowned skin previewable — show a
               //- generic coin icon (claim will fall back to coins).
-              IconCoin(class="w-5 h-5 sm:w-6 sm:h-6 text-yellow-300 my-0.5 opacity-70")
+              IconSlimeDrop(class="w-5 h-5 sm:w-6 sm:h-6 my-0.5 opacity-70")
             template(v-else)
-              IconCoin(class="w-5 h-5 sm:w-6 sm:h-6 text-yellow-300 my-0.5")
+              IconSlimeDrop(class="w-5 h-5 sm:w-6 sm:h-6 my-0.5")
 
             //- Skin label
             div.font-black.game-text.text-purple-300.uppercase.tracking-wider.leading-tight(

@@ -114,11 +114,15 @@ const sizeStyle = computed(() => {
 
 const positionStyle = computed(() => {
   if (done.value) {
-    // Top-left below stage badge (~52px down, 12px left). Add safe-area
-    // insets so the logo clears the iPhone notch / Dynamic Island in
-    // portrait and the side cutout in landscape PWA standalone mode.
+    // Top-left below stage badge. The badge is now taller in the
+    // slime build (it embeds the player-level XP bar below the
+    // stage name), so we sit 28 px lower than chaos-arena did
+    // (80 px instead of 52 px) to clear it without overlapping.
+    // Safe-area insets keep us off the iPhone notch / Dynamic
+    // Island in portrait and the side cutout in landscape PWA
+    // standalone mode.
     return {
-      top: 'calc(52px + env(safe-area-inset-top, 0px))',
+      top: 'calc(80px + env(safe-area-inset-top, 0px))',
       left: 'calc(12px + env(safe-area-inset-left, 0px))',
       transform: 'none'
     }
